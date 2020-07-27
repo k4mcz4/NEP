@@ -287,7 +287,59 @@ def index():
         extractions = current_user.get_moon_extractions()
         print(str(extractions.data))
 
-    return render_template("index.html", **{'wallet': wallet})
+    return render_template("index.html")
+
+
+@app.route("/assets")
+def assets():
+    if current_user.is_authenticated:
+        security.update_token(current_user.get_sso_data())
+
+        character_id = current_user.get_character_id()
+        op = esiApp.op['get_characters_character_id_assets'](character_id=character_id)
+
+        response = client.head(op)
+
+        if response.status == 200:
+            number_of_page = response.header['X-Pages'][0]
+
+            if number_of_page > 1:
+
+                operations = []
+                for page in range(1, number_of_page + 1):
+                    operations.append(
+                        esiApp.op['get_characters_character_id_assets'](
+                            character_id=character_id,
+                            page=page)
+                    )
+
+                results = client.multi_request(operations)
+
+                item_list = []
+
+                for resp in results:
+                    item_list += resp[1].data
+
+                type_list = [34, 35, 36, 37, 38, 39, 40]
+
+                item_list = [
+                    {"type_id": item['type_id'],
+                     "quantity": item['quantity']}
+                    for item in item_list if item['type_id'] in type_list
+                ]
+
+                formated_item_list = []
+
+                for type_id in type_list:
+                    qty = 0
+                    for item in item_list:
+
+                        if type_id == item['type_id']:
+                            qty += item['quantity']
+
+                    formated_item_list += [{"type_id": type_id, "quantity": qty}]
+
+        return render_template("assets.html", items=formated_item_list)
 
 
 @app.route("/check")

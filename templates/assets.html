@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Home Page{% endblock %}
+{% block content %}
+<table>
+{% for item in items %}
+    <tr>
+      <td><img src="https://images.evetech.net/types/{{item['type_id']}}/icon" align="middle" /></td><td>{{item['quantity']}}</td>
+    </tr>
+{% endfor %}
+</table>
+{% endblock %}
