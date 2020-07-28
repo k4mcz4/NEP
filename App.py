@@ -19,6 +19,7 @@ from flask_login import UserMixin
 from flask_login import login_user
 
 from AuthConfig import *
+from ItemLists import *
 
 from esipy import EsiApp
 from esipy import EsiClient
@@ -108,7 +109,7 @@ class UserSession(db.Model, UserMixin):
 
     def update_token(self, token_response):
         """ helper function to update token data from SSO response """
-        token = Token.query.get(token_id=self.token_id)
+        token = Token.query.get(self.token_id)
         token.access_token = token_response['access_token']
         token.expires_at = datetime.fromtimestamp(
             time.time() + token_response['expires_in'],
@@ -300,8 +301,12 @@ def assets():
 
         response = client.head(op)
 
+        formatted_item_list = []
+
         if response.status == 200:
             number_of_page = response.header['X-Pages'][0]
+
+            item_list = []
 
             if number_of_page > 1:
 
@@ -315,31 +320,55 @@ def assets():
 
                 results = client.multi_request(operations)
 
-                item_list = []
-
                 for resp in results:
                     item_list += resp[1].data
 
-                type_list = [34, 35, 36, 37, 38, 39, 40]
+            else:
+                assets = client.request(op)
+                item_list += assets.data
 
-                item_list = [
-                    {"type_id": item['type_id'],
-                     "quantity": item['quantity']}
-                    for item in item_list if item['type_id'] in type_list
-                ]
+            item_list = [
+                {
+                    "type_id": item['type_id'],
+                    "quantity": item['quantity']
+                }
+                for item in item_list if item['type_id'] in industry_item_type_list()
+            ]
 
-                formated_item_list = []
+            for industry_i, industry_list in enumerate(INDUSTRY_ITEM_ARRAY):
+                item_entry = {
+                    "resource_type": INDUSTRY_SEQUENCE[industry_i],
+                    "materials_list": []
+                }
 
-                for type_id in type_list:
+                for item in industry_list:
                     qty = 0
-                    for item in item_list:
+                    for i, type_id in enumerate(item_list):
 
-                        if type_id == item['type_id']:
-                            qty += item['quantity']
+                        if item["type_id"] == type_id["type_id"]:
+                            qty += type_id["quantity"]
 
-                    formated_item_list += [{"type_id": type_id, "quantity": qty}]
+                            del item_list[i]
 
-        return render_template("assets.html", items=formated_item_list)
+                    item_entry["materials_list"].append({
+                        "type_id": item["type_id"],
+                        "type_name": item["type_name"],
+                        "quantity": qty
+                    })
+
+                formatted_item_list += [item_entry]
+
+        else:
+            #TODO: Fix this. With every access there should be token expiry checks of some sort
+            tokens = security.refresh()
+            security.update_token(tokens)
+            current_user.update_token(tokens)
+
+            print(tokens)
+
+            print(response.status)
+
+        return render_template("assets.html", items=formatted_item_list)
 
 
 @app.route("/check")

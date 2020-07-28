@@ -1,11 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Home Page{% endblock %}
+{% block title %}New Eden Petroleum{% endblock %}
 {% block content %}
-<table>
-{% for item in items %}
-    <tr>
-      <td><img src="https://images.evetech.net/types/{{item['type_id']}}/icon" align="middle" /></td><td>{{item['quantity']}}</td>
-    </tr>
-{% endfor %}
-</table>
+<div class="flex-container">
+    {% for item in items %}
+    <div class="resource-tab">
+        <th>{{item["resource_type"]}}</th>
+
+        <table width="20%">
+            {% for material in item["materials_list"] %}
+            {% if material['quantity'] > 0 %}
+            <tr>
+                <td width="1%"><img src="https://images.evetech.net/types/{{material['type_id']}}/icon" align="middle"/>
+                </td>
+                <td>{{material['type_name']}}:</td>
+                <td>{{material['quantity']}}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+
+        </table>
+    </div>
+    {% endfor %}
+</div>
 {% endblock %}
