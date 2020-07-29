@@ -72,13 +72,20 @@ client = EsiClient(
 
 
 # -----------------------------------------------------------------------
+# Token re-loader
+# -----------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------
 # Flask Login requirements
 # -----------------------------------------------------------------------
 @login_manager.user_loader
 def load_user(session_id):
     """ Required user loader for Flask-Login """
     user_session = UserSession.query.get(session_id)
-    if user_session.verify_login():
+    if user_session is None:
+        return None
+    elif user_session.verify_login():
         return user_session
     else:
         return None
@@ -138,6 +145,29 @@ class UserSession(db.Model, UserMixin):
 
         return extractions
 
+    def is_token_active(self):
+        token = Token.query.get(self.token_id)
+        token_expiration = (
+                token.expires_at - datetime.utcnow()
+        ).total_seconds()
+
+        if token_expiration < 1:
+            return False
+        else:
+            return True
+
+    def load_token(self, security_obj):
+        if self.is_token_active():
+            security.update_token(self.get_sso_data())
+        else:
+            security_obj.update_token(self.get_sso_data())
+            tokens = security_obj.refresh()
+            security_obj.update_token(tokens)
+            self.update_token(tokens)
+
+    def get_token(self):
+        return Token.query.get(self.token_id)
+
 
 class Character(db.Model, UserMixin):
     __tablename__ = 'Characters'
@@ -162,6 +192,13 @@ class Character(db.Model, UserMixin):
         else:
             True
 
+    def get_character_id(self):
+        return Character.query.filter_by(character_id=self.character_id).first()
+
+    def get_connected_token(self):
+        connected_session = UserSession.query.filter_by(unique_character_id=self.id).first()
+        return connected_session.get_token()
+
 
 class Token(UserMixin, db.Model):
     __tablename__ = 'Tokens'
@@ -170,6 +207,17 @@ class Token(UserMixin, db.Model):
     expires_at = db.Column("expiresAt", db.DateTime)
     token_type = db.Column("tokenType", db.String(30))
     refresh_token = db.Column("refreshToken", db.String(200))
+
+    def get_token_json(self):
+        token = Token.query.get(self.id)
+
+        return {
+            'access_token': token.access_token,
+            'refresh_token': token.refresh_token,
+            'expires_in': (
+                    token.expires_at - datetime.utcnow()
+            ).total_seconds()
+        }
 
 
 class Corporation(UserMixin, db.Model):
@@ -218,25 +266,35 @@ def auth_code():
                 refresh_token=auth_response['refresh_token']
             )
 
-            db.session.add(esi_token)
-            db.session.commit()
-
             cdata = security.verify()
 
             character_id = cdata['sub'].split(':')[2]
-            op = esiApp.op['get_characters_character_id'](character_id=character_id)
-            character = client.request(op)
-            character = character.data
-            character_data = Character(
-                character_id=character_id,
-                character_name=character['name'],
-                corporation_id=character['corporation_id']
-            )
 
-            db.session.add(character_data)
-            db.session.commit()
+            character_data = Character(character_id=character_id).get_character_id()
+
+            if character_data is None:
+                op = esiApp.op['get_characters_character_id'](character_id=character_id)
+                character = client.request(op)
+                character = character.data
+                character_data = Character(
+                    character_id=character_id,
+                    character_name=character['name'],
+                    corporation_id=character['corporation_id']
+                )
+
+                db.session.add(character_data)
+                db.session.commit()
+
+                db.session.add(esi_token)
+                db.session.commit()
+
+            else:
+                security.revoke()
+                esi_token = character_data.get_connected_token()
+                security.update_token(esi_token)
 
             if character_data.is_corporation_authorized():
+
                 if character_data.is_corporation_in_database():
                     op = esiApp.op['get_corporations_corporation_id'](corporation_id=character['corporation_id'])
                     corporation = client.request(op)
@@ -279,10 +337,11 @@ def index():
     wallet = None
 
     if current_user.is_authenticated:
-        security.update_token(current_user.get_sso_data())
+        current_user.load_token(security)
 
         character_id = current_user.get_character_id()
         op = esiApp.op['get_characters_character_id_wallet'](character_id=character_id)
+
         wallet = client.request(op)
 
         extractions = current_user.get_moon_extractions()
@@ -293,8 +352,9 @@ def index():
 
 @app.route("/assets")
 def assets():
+    # TODO: Fix issue with redirection if not authenticated
     if current_user.is_authenticated:
-        security.update_token(current_user.get_sso_data())
+        current_user.load_token(security)
 
         character_id = current_user.get_character_id()
         op = esiApp.op['get_characters_character_id_assets'](character_id=character_id)
@@ -357,16 +417,6 @@ def assets():
                     })
 
                 formatted_item_list += [item_entry]
-
-        else:
-            #TODO: Fix this. With every access there should be token expiry checks of some sort
-            tokens = security.refresh()
-            security.update_token(tokens)
-            current_user.update_token(tokens)
-
-            print(tokens)
-
-            print(response.status)
 
         return render_template("assets.html", items=formatted_item_list)
 
