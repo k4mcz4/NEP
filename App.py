@@ -2,6 +2,7 @@ import os
 import time
 import hashlib
 import uuid
+import json
 
 from datetime import datetime
 from datetime import timedelta
@@ -17,6 +18,7 @@ from flask_login import LoginManager
 from flask_login import current_user
 from flask_login import UserMixin
 from flask_login import login_user
+from flask_login import logout_user
 
 from AuthConfig import *
 from ItemLists import *
@@ -72,11 +74,6 @@ client = EsiClient(
 
 
 # -----------------------------------------------------------------------
-# Token re-loader
-# -----------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------
 # Flask Login requirements
 # -----------------------------------------------------------------------
 @login_manager.user_loader
@@ -110,7 +107,7 @@ class UserSession(db.Model, UserMixin):
             'access_token': token.access_token,
             'refresh_token': token.refresh_token,
             'expires_in': (
-                    token.expires_at - datetime.utcnow()
+                    token.expires_at - datetime.now()
             ).total_seconds()
         }
 
@@ -147,11 +144,17 @@ class UserSession(db.Model, UserMixin):
 
     def is_token_active(self):
         token = Token.query.get(self.token_id)
+
+        if token is None:
+            False
+
         token_expiration = (
-                token.expires_at - datetime.utcnow()
+                token.expires_at - datetime.now()
         ).total_seconds()
 
-        if token_expiration < 1:
+        print(datetime.now())
+
+        if int(token_expiration) < 0:
             return False
         else:
             return True
@@ -161,9 +164,24 @@ class UserSession(db.Model, UserMixin):
             security.update_token(self.get_sso_data())
         else:
             security_obj.update_token(self.get_sso_data())
-            tokens = security_obj.refresh()
-            security_obj.update_token(tokens)
-            self.update_token(tokens)
+
+            try:
+                tokens = security_obj.refresh()
+                security_obj.update_token(tokens)
+                self.update_token(tokens)
+
+            except APIException as e:
+                error = e.response
+                error = json.loads(error.decode('UTF-8'))
+                if error["error"] == "invalid_grant":
+                    token_del = Token.query.filter_by(id=self.token_id).first()
+                    session_del = UserSession.query.filter_by(token_id=self.token_id).all()
+                    db.session.delete(token_del)
+                    db.session.commit()
+                    for single_session in session_del:
+                        db.session.delete(single_session)
+                        db.session.commit()
+                    logout_user()
 
     def get_token(self):
         return Token.query.get(self.token_id)
@@ -197,7 +215,13 @@ class Character(db.Model, UserMixin):
 
     def get_connected_token(self):
         connected_session = UserSession.query.filter_by(unique_character_id=self.id).first()
-        return connected_session.get_token()
+
+        if connected_session is None:
+            token = None
+        else:
+            token = connected_session.get_token()
+
+        return token
 
 
 class Token(UserMixin, db.Model):
@@ -289,9 +313,15 @@ def auth_code():
                 db.session.commit()
 
             else:
-                security.revoke()
-                esi_token = character_data.get_connected_token()
-                security.update_token(esi_token)
+                esi_token_check = character_data.get_connected_token()
+
+                if esi_token_check is None:
+                    db.session.add(esi_token)
+                    db.session.commit()
+                else:
+                    esi_token = esi_token_check
+
+                security.update_token(esi_token.get_token_json())
 
             if character_data.is_corporation_authorized():
 
@@ -417,8 +447,10 @@ def assets():
                     })
 
                 formatted_item_list += [item_entry]
+    else:
+        formatted_item_list = []
 
-        return render_template("assets.html", items=formatted_item_list)
+    return render_template("assets.html", items=formatted_item_list)
 
 
 @app.route("/check")

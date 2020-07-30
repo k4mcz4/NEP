@@ -5,7 +5,8 @@ MINERAL_TYPE_LIST = [
     {"type_id": 37, "type_name": "Isogen"},
     {"type_id": 38, "type_name": "Nocxium"},
     {"type_id": 39, "type_name": "Zydrine"},
-    {"type_id": 40, "type_name": "Megacyte"}
+    {"type_id": 40, "type_name": "Megacyte"},
+    {"type_id": 11399, "type_name": "Morphite"}
 ]
 
 MOON_GOO_TYPE_LIST = [
