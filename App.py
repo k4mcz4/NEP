@@ -413,6 +413,8 @@ def assets():
                 for resp in results:
                     item_list += resp[1].data
 
+                print(item_list)
+
             else:
                 assets = client.request(op)
                 item_list += assets.data
@@ -422,8 +424,11 @@ def assets():
                     "type_id": item['type_id'],
                     "quantity": item['quantity']
                 }
-                for item in item_list if item['type_id'] in industry_item_type_list()
+                for item in item_list if
+                item['type_id'] in industry_item_type_list() and item['location_id'] == 1033753457751
             ]
+
+            print(item_list)
 
             for industry_i, industry_list in enumerate(INDUSTRY_ITEM_ARRAY):
                 item_entry = {
@@ -433,12 +438,11 @@ def assets():
 
                 for item in industry_list:
                     qty = 0
+
                     for i, type_id in enumerate(item_list):
 
                         if item["type_id"] == type_id["type_id"]:
                             qty += type_id["quantity"]
-
-                            del item_list[i]
 
                     item_entry["materials_list"].append({
                         "type_id": item["type_id"],
