@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}New Eden Petroleum{% endblock %}
+{% block content %}
+    <table>
+    {% for contract in contract_list %}
+        <tr>
+            <td>{{contract["contract_id"]}}</td>
+            <td>{{contract["title"]}}</td>
+            <td>{{contract["price"]}}</td>
+            <td>{{contract["date_issued"]}}</td>
+            <td>{{contract["date_accepted"]}}</td>
+            <td>{{contract["status"]}}</td>
+        </tr>
+    {% endfor %}
+    </table>
+{% endblock %}

@@ -413,8 +413,6 @@ def assets():
                 for resp in results:
                     item_list += resp[1].data
 
-                print(item_list)
-
             else:
                 assets = client.request(op)
                 item_list += assets.data
@@ -428,8 +426,6 @@ def assets():
                 item['type_id'] in industry_item_type_list() and item['location_id'] == 1033753457751
             ]
 
-            print(item_list)
-
             for industry_i, industry_list in enumerate(INDUSTRY_ITEM_ARRAY):
                 item_entry = {
                     "resource_type": INDUSTRY_SEQUENCE[industry_i],
@@ -438,11 +434,20 @@ def assets():
 
                 for item in industry_list:
                     qty = 0
+                    i = 0
 
-                    for i, type_id in enumerate(item_list):
+                    for type_id in item_list:
+
+                        increment_index = True
 
                         if item["type_id"] == type_id["type_id"]:
                             qty += type_id["quantity"]
+                            del item_list[i]
+
+                            increment_index = False
+
+                        if increment_index:
+                            i += 1
 
                     item_entry["materials_list"].append({
                         "type_id": item["type_id"],
@@ -457,20 +462,54 @@ def assets():
     return render_template("assets.html", items=formatted_item_list)
 
 
-@app.route("/check")
-def check():
-    check_user_session = UserSession().query.filter_by(session_id='12345').first()
-    print(check_user_session)
+@app.route("/industry")
+def industry():
+    if current_user.is_authenticated:
+        current_user.load_token(security)
 
-    return str(check_user_session.token_id)
+        character_id = current_user.get_character_id()
+        op = esiApp.op['get_characters_character_id_contracts'](character_id=character_id)
 
+        response = client.head(op)
 
-@app.route("/pop")
-def pop():
-    if len(session) > 1:
-        session.pop('token')
+        contract_list = []
 
-    return redirect(url_for("index"))
+        if response.status == 200:
+            number_of_page = response.header['X-Pages'][0]
+
+            if number_of_page > 1:
+
+                operations = []
+                for page in range(1, number_of_page + 1):
+                    operations.append(
+                        esiApp.op['get_characters_character_id_assets'](
+                            character_id=character_id,
+                            page=page)
+                    )
+
+                results = client.multi_request(operations)
+
+                for resp in results:
+                    contract_list += resp[1].data
+
+            else:
+                contracts = client.request(op)
+                contract_list += contracts.data
+
+            contract_list = [
+                {
+                    "contract_id": contract['contract_id'],
+                    "title": contract['title'],
+                    "price": contract['price'],
+                    "created_at": contract['date_issued'],
+                    "accepted_at": contract['date_accepted'],
+                    "status": contract['status']
+                }
+                for contract in contract_list if
+                contract['acceptor_id'] == character_id
+            ]
+
+    return render_template("industry.html", contract_list=contract_list)
 
 
 if __name__ == "__main__":
