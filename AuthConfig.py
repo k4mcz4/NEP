@@ -4,9 +4,9 @@ TOKEN_AUTH_URL = 'https://login.eveonline.com/v2/oauth/token'
 
 VERIFY_TOKEN_URL = 'https://esi.evetech.net/verify'
 
-CLIENT_ID = '4cece0bcc7bc49ebbe16fef1a5d41692'
+CLIENT_ID = ''
 
-SECRET = 'cIu8tVSFR4WLpKZLoPy5dpXMlRGeLL0SqxJZChQA'
+SECRET = ''
 
 REDIRECT_URI = 'http://127.0.0.1:5000/auth/code'
 
